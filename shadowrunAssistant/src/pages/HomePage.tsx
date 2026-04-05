@@ -8,8 +8,7 @@ function HomePage({ onNavigate }: HomePageProps) {
   return (
     <main className="page page-home">
       <section className="hero-panel">
-        <p className="eyebrow">Shadowrun Assistant</p>
-        <h1>Deine Navigation kann einfach als Kachel funktionieren.</h1>
+        <p className="eyebrow">Shadowrun Assistant</p>        
         <p className="intro">
           Klick auf die Kachel unten und du landest auf einer zweiten Seite
           innerhalb deiner App.
