@@ -10,6 +10,14 @@ type ModifierOption = {
   diceModifier: number
 }
 
+type RangeModifierDto = {
+  weaponType: string
+  shortMax: number
+  mediumMax: number
+  longMax: number
+  extremeMax: number
+}
+
 type CalculateOptionsResponse = {
   sights?: ModifierOption[]
   aimAids?: ModifierOption[]
@@ -52,6 +60,7 @@ type CalculateFormState = {
   action: {
     movement: string
     shotsFired: number
+    takeAim: number
   }
 }
 
@@ -89,6 +98,7 @@ const defaultFormState: CalculateFormState = {
   action: {
     movement: '',
     shotsFired: 0,
+    takeAim: 0,
   },
 }
 
@@ -183,6 +193,10 @@ const mergeFormState = (value: unknown): CalculateFormState => {
         typeof source.action?.shotsFired === 'number'
           ? source.action.shotsFired
           : defaultFormState.action.shotsFired,
+      takeAim:
+        typeof source.action?.takeAim === 'number'
+          ? source.action.takeAim
+          : defaultFormState.action.takeAim,
     },
   }
 }
@@ -361,6 +375,7 @@ type NumberInputFieldProps = {
   value: number
   min?: number
   max?: number
+  displayValue?: string | number
   onChange: (value: number) => void
 }
 
@@ -369,13 +384,14 @@ function NumberInputField({
   value,
   min = 0,
   max = 9999,
+  displayValue,
   onChange,
 }: NumberInputFieldProps) {
   return (
     <label className="slider-field">
       <div className="slider-header">
         <span className="slider-label">{label}</span>
-        <strong className="slider-value">{value}</strong>
+        <strong className="slider-value">{displayValue ?? value}</strong>
       </div>
       <input
         className="number-input"
@@ -407,6 +423,7 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
   )
   const [calculateOptions, setCalculateOptions] =
     useState<CalculateOptionsResponse | null>(null)
+  const [rangeOptions, setRangeOptions] = useState<RangeModifierDto[]>([])
   const [isLoadingOptions, setIsLoadingOptions] = useState(true)
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -421,16 +438,29 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
       setOptionsError(null)
 
       try {
-        const response = await fetch('/api/modifier-combat/calculate-options')
-        const responseText = await response.text()
+        const [optionsResponse, rangeResponse] = await Promise.all([
+          fetch('/api/modifier-combat/calculate-options'),
+          fetch('/api/modifier-combat/range-modifiers'),
+        ])
+        const [optionsText, rangeText] = await Promise.all([
+          optionsResponse.text(),
+          rangeResponse.text(),
+        ])
 
-        if (!response.ok) {
+        if (!optionsResponse.ok) {
           throw new Error(
-            responseText || `Request failed with status ${response.status}`,
+            optionsText || `Request failed with status ${optionsResponse.status}`,
           )
         }
 
-        setCalculateOptions(JSON.parse(responseText) as CalculateOptionsResponse)
+        if (!rangeResponse.ok) {
+          throw new Error(
+            rangeText || `Request failed with status ${rangeResponse.status}`,
+          )
+        }
+
+        setCalculateOptions(JSON.parse(optionsText) as CalculateOptionsResponse)
+        setRangeOptions(JSON.parse(rangeText) as RangeModifierDto[])
       } catch (error) {
         setOptionsError(
           error instanceof Error ? error.message : 'Unknown request error',
@@ -446,6 +476,22 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
   useEffect(() => {
     window.localStorage.setItem(storageKeys.request, JSON.stringify(formState))
   }, [formState])
+
+  useEffect(() => {
+    const maxTakeAim = Math.floor(formState.character.skill / 2)
+
+    if (formState.action.takeAim <= maxTakeAim) {
+      return
+    }
+
+    setFormState((currentValue) => ({
+      ...currentValue,
+      action: {
+        ...currentValue.action,
+        takeAim: maxTakeAim,
+      },
+    }))
+  }, [formState.action.takeAim, formState.character.skill])
 
   useEffect(() => {
     window.localStorage.setItem(storageKeys.panels, JSON.stringify(panelStates))
@@ -661,6 +707,27 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
     })) ?? []
 
   const miscellaneousOptions = calculateOptions?.miscellaneousModifiers ?? []
+  const maxTakeAim = Math.floor(formState.character.skill / 2)
+  const selectedRangeProfile =
+    rangeOptions.find((entry) => entry.weaponType === formState.gear.weaponType) ??
+    null
+  const rangeModifierValue = selectedRangeProfile
+    ? formState.target.distanceMeters <= selectedRangeProfile.shortMax
+      ? 0
+      : formState.target.distanceMeters <= selectedRangeProfile.mediumMax
+        ? -1
+        : formState.target.distanceMeters <= selectedRangeProfile.longMax
+          ? -3
+          : formState.target.distanceMeters <= selectedRangeProfile.extremeMax
+            ? -6
+            : -6
+    : null
+  const formattedRangeModifier =
+    rangeModifierValue === null
+      ? '-'
+      : rangeModifierValue > 0
+        ? `+${rangeModifierValue}`
+        : String(rangeModifierValue)
 
   const formattedApiResponse =
     typeof apiResponse === 'string'
@@ -679,7 +746,7 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
     <main className="page page-detail">
       <section className="detail-card">
         <div className="page-toolbar">
-          <p className="eyebrow">Combat Assistant</p>
+          <p className="eyebrow">Shoot</p>
           <button type="button" className="secondary-button" onClick={handleReset}>
             Reset
           </button>
@@ -695,6 +762,66 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
         {isLoadingOptions ? <p>Lade Calculate-Optionen...</p> : null}
         {optionsError ? <pre className="combat-result error">{optionsError}</pre> : null}
         <div className="combat-form combat-form-secondary">
+          <details
+            className="control-panel"
+            open={isPanelOpen('group:action')}
+            onToggle={(event) =>
+              handlePanelToggle('group:action', event.currentTarget.open)
+            }
+          >
+            <summary className="control-panel-summary">
+              <span className="control-panel-title">action</span>
+            </summary>
+            <div className="control-panel-body">
+              <SelectField
+                label="movement"
+                value={formState.action.movement}
+                options={movementOptions}
+                onChange={(value) => updateAction('movement', value)}
+              />
+              <StepperField
+                label="shotsFired"
+                value={formState.action.shotsFired}
+                min={1}
+                max={15}
+                onChange={(value) => updateAction('shotsFired', value)}
+              />
+              <StepperField
+                label="takeAim"
+                value={formState.action.takeAim}
+                min={0}
+                max={maxTakeAim}
+                onChange={(value) => updateAction('takeAim', value)}
+              />
+            </div>
+          </details>
+          <details
+            className="control-panel"
+            open={isPanelOpen('group:target')}
+            onToggle={(event) =>
+              handlePanelToggle('group:target', event.currentTarget.open)
+            }
+          >
+            <summary className="control-panel-summary">
+              <span className="control-panel-title">target</span>
+            </summary>
+            <div className="control-panel-body">
+              <NumberInputField
+                label="distanceMeters"
+                value={formState.target.distanceMeters}
+                min={0}
+                max={3000}
+                displayValue={formattedRangeModifier}
+                onChange={(value) => updateTarget('distanceMeters', value)}
+              />
+              <SelectField
+                label="cover"
+                value={formState.target.cover}
+                options={coverOptions}
+                onChange={(value) => updateTarget('cover', value)}
+              />
+            </div>
+          </details>
           <details
             className="control-panel"
             open={isPanelOpen('group:situation')}
@@ -734,58 +861,6 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
                   ))}
                 </div>
               </div>
-            </div>
-          </details>
-          <details
-            className="control-panel"
-            open={isPanelOpen('group:target')}
-            onToggle={(event) =>
-              handlePanelToggle('group:target', event.currentTarget.open)
-            }
-          >
-            <summary className="control-panel-summary">
-              <span className="control-panel-title">target</span>
-            </summary>
-            <div className="control-panel-body">
-              <NumberInputField
-                label="distanceMeters"
-                value={formState.target.distanceMeters}
-                min={0}
-                max={3000}
-                onChange={(value) => updateTarget('distanceMeters', value)}
-              />
-              <SelectField
-                label="cover"
-                value={formState.target.cover}
-                options={coverOptions}
-                onChange={(value) => updateTarget('cover', value)}
-              />
-            </div>
-          </details>
-          <details
-            className="control-panel"
-            open={isPanelOpen('group:action')}
-            onToggle={(event) =>
-              handlePanelToggle('group:action', event.currentTarget.open)
-            }
-          >
-            <summary className="control-panel-summary">
-              <span className="control-panel-title">action</span>
-            </summary>
-            <div className="control-panel-body">
-              <SelectField
-                label="movement"
-                value={formState.action.movement}
-                options={movementOptions}
-                onChange={(value) => updateAction('movement', value)}
-              />
-              <StepperField
-                label="shotsFired"
-                value={formState.action.shotsFired}
-                min={1}
-                max={15}
-                onChange={(value) => updateAction('shotsFired', value)}
-              />
             </div>
           </details>
           <details

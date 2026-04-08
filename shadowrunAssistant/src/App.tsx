@@ -3,7 +3,9 @@ import './App.css'
 import TopNav from './components/TopNav'
 import { getPageFromHash, pageHashes, type Page } from './navigation'
 import CombatAssistantPage from './pages/CombatAssistantPage'
+import CombatActionsPage from './pages/CombatActionsPage'
 import HomePage from './pages/HomePage'
+import ScatterPage from './pages/ScatterPage'
 
 function App() {
   const [page, setPage] = useState<Page>(getPageFromHash)
@@ -27,6 +29,10 @@ function App() {
       <TopNav currentPage={page} onNavigate={navigateTo} />
       {page === 'home' ? (
         <HomePage onNavigate={navigateTo} />
+      ) : page === 'scatter' ? (
+        <ScatterPage onBack={() => navigateTo('home')} />
+      ) : page === 'combatActions' ? (
+        <CombatActionsPage onBack={() => navigateTo('home')} />
       ) : (
         <CombatAssistantPage onBack={() => navigateTo('home')} />
       )}

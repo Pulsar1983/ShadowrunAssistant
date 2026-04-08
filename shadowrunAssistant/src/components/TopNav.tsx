@@ -21,6 +21,18 @@ function TopNav({ currentPage, onNavigate }: TopNavProps) {
       >
         {pageLabels.combat}
       </button>
+      <button
+        className={currentPage === 'combatActions' ? 'nav-link active' : 'nav-link'}
+        onClick={() => onNavigate('combatActions')}
+      >
+        {pageLabels.combatActions}
+      </button>
+      <button
+        className={currentPage === 'scatter' ? 'nav-link active' : 'nav-link'}
+        onClick={() => onNavigate('scatter')}
+      >
+        {pageLabels.scatter}
+      </button>
     </nav>
   )
 }
