@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getApiUrl } from '../config'
 
 type CombatAssistantPageProps = {
   onBack: () => void
@@ -439,8 +440,8 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
 
       try {
         const [optionsResponse, rangeResponse] = await Promise.all([
-          fetch('/api/modifier-combat/calculate-options'),
-          fetch('/api/modifier-combat/range-modifiers'),
+          fetch(getApiUrl('/api/modifier-combat/calculate-options')),
+          fetch(getApiUrl('/api/modifier-combat/range-modifiers')),
         ])
         const [optionsText, rangeText] = await Promise.all([
           optionsResponse.text(),
@@ -507,7 +508,7 @@ function CombatAssistantPage({ onBack }: CombatAssistantPageProps) {
       setApiError(null)
 
       try {
-        const response = await fetch('/api/modifier-combat/calculate', {
+        const response = await fetch(getApiUrl('/api/modifier-combat/calculate'), {
           signal: abortController.signal,
           method: 'POST',
           headers: {
